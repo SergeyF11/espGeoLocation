@@ -30,7 +30,7 @@ namespace GeoLocation
     // Структура для хранения геоданных
     struct GeoData
     {
-    private:
+//    private:
         constexpr static long NOT_VALID_OFFSET = 0x7FFFFFFF;
         static bool offsetIsValid(long _offset){ return _offset != NOT_VALID_OFFSET; };
         bool isValid = false;        
@@ -55,6 +55,7 @@ namespace GeoLocation
             p.printf("UTC Offset: %d sec (%+.1f hrs)\n", offset, offset / 3600.0);
             p.printf("Location: %.4f, %.4f\n", latitude, longitude);
         }
+        
     };
 
     // Состояния асинхронного запроса
