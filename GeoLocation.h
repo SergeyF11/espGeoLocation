@@ -30,9 +30,11 @@ namespace GeoLocation
     // Структура для хранения геоданных
     struct GeoData
     {
+    private:
         constexpr static long NOT_VALID_OFFSET = 0x7FFFFFFF;
         static bool offsetIsValid(long _offset){ return _offset != NOT_VALID_OFFSET; };
-
+        bool isValid = false;        
+    public:
         char ip[IP_SIZE] = "";
         char country[COUNTRY_SIZE] = "";
         char city[CITY_SIZE] = "";
@@ -40,7 +42,6 @@ namespace GeoLocation
         int offset = NOT_VALID_OFFSET;
         float latitude = 0.0;
         float longitude = 0.0;
-        bool isValid = false;
 
         bool offsetIsValid() const { return offsetIsValid(offset); };
         bool valid() const { return isValid; }
@@ -246,21 +247,5 @@ namespace GeoLocation
         void _configTime();
         void completeRequest();
 
-        // Методы обработки состояний
-        // void processIdle();
-        // void processConnecting();
-        // void processSendingRequest();
-        // void processReceiving();
-        // void processParsing();
-        // void processSettingTime();
-        // void processCompleted();
-        // void processError();
-        
-        // // Вспомогательные методы
-        // bool connectToServer();
-        // bool sendHttpRequest();
-        // void parseHttpDate(const String& httpDate);
-        // void setSystemTime();
-        // bool parseResponseLine(const String& line, int lineIndex);
     };
 }

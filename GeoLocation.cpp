@@ -192,7 +192,7 @@ namespace GeoLocation
     
     void GeoLocation::setState(State newState)
     {
-        if (_state != newState)
+        if (_state != newState)                            
         {
             _state = newState;
             _lastActivity = millis();
@@ -265,11 +265,9 @@ void GeoLocation::processResponse()
                     {
                         auto httpTime = parseHttpDate(_currentLine.substring(6));
                         if ( httpTime > LIKE_VALID_TIME ){
-                            //auto corectedTime = time_t ( ((httpTime * 1000) + httpCorrectionMs + _executionTime)/1000 );
-                            // auto corectedTime = httpTime + (( httpCorrectionMs + _executionTime)/1000);
-                            // setSystemTime( corectedTime );
+
                             setSystemTime(httpTime, ( httpCorrectionMs + _executionTime)*1000 );
-                            //adjTime(_executionTime + httpCorrectionMs );
+
                             _httpDateSet = true;
                         }
                     }
@@ -397,64 +395,6 @@ void GeoLocation::processResponse()
         }
     }
     
-    // void GeoLocation::parseHttpDate(const String& httpDate)
-    // {
-    //     // Простой парсер HTTP-даты (упрощенный)
-    //     // Формат: "Mon, 25 Dec 2023 14:30:45 GMT"
-    //     const char* str = httpDate.c_str();
-        
-    //     // Пропускаем день недели
-    //     while (*str && *str != ',') str++;
-    //     if (*str == ',') str++;
-    //     while (*str == ' ') str++;
-        
-    //     // День
-    //     int day = atoi(str);
-    //     while (*str && *str != ' ') str++;
-    //     while (*str == ' ') str++;
-        
-    //     // Месяц
-    //     const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    //                            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-    //     int month = 0;
-    //     for (int i = 0; i < 12; i++)
-    //     {
-    //         if (strncmp(str, months[i], 3) == 0)
-    //         {
-    //             month = i;
-    //             break;
-    //         }
-    //     }
-    //     str += 3;
-    //     while (*str == ' ') str++;
-        
-    //     // Год
-    //     int year = atoi(str) - 1900;
-    //     while (*str && *str != ' ') str++;
-    //     while (*str == ' ') str++;
-        
-    //     // Время
-    //     int hour = atoi(str);
-    //     while (*str && *str != ':') str++;
-    //     str++; // :
-    //     int minute = atoi(str);
-    //     while (*str && *str != ':') str++;
-    //     str++; // :
-    //     int second = atoi(str);
-        
-    //     // Устанавливаем время
-    //     struct tm tm = {0};
-    //     tm.tm_mday = day;
-    //     tm.tm_mon = month;
-    //     tm.tm_year = year;
-    //     tm.tm_hour = hour;
-    //     tm.tm_min = minute;
-    //     tm.tm_sec = second;
-        
-    //     time_t unixTime = mktime(&tm);
-
-    //     setSystemTime(unixTime);
-    // }
     time_t GeoLocation::parseHttpDate(const String& httpDate) const
     {
         time_t httpTime = 0;
@@ -516,110 +456,6 @@ void GeoLocation::processResponse()
     }
 
     
-    // void GeoLocation::configTime()
-    // {
-    // //         if ((_data.offsetIsValid() ) && ( !GeoData::offsetIsValid( _currentOffset )  || _currentOffset != _data.offset ) )
-    // //     {
-            
-    // //         #if defined(ESP32)
-    // //         log_i("Configure time offset %d", _data.offset );
-    // //         #else 
-    // //         #ifdef ERROR_DEBUG
-    // //         Serial.printf("Configure time offset %d\n", _data.offset );
-    // //         #endif
-    // //         #endif
-            
-    // //         _currentOffset = _data.offset;
-    // //         //sntp_set_timezone_in_seconds(_data.offset);
-
-    // //         ::configTime(_data.offset, 0, "pool.ntp.org", "time.nist.gov");
-    // //         //setTimeZone(-_data.offset );
-    // //         // Ждем синхронизации (неблокирующе)
-    // //         static unsigned long syncStart = millis();
-    // //         struct tm timeinfo;
-            
-    // //         if (getLocalTime(&timeinfo, 5000))
-    // //         {
-    // //             // Время установлено
-    // //         }
-    // //          else 
-    // //         {
-    // //             #if defined(ESP32)
-    // //             log_i("Is configured already");
-    // //             #else 
-    // //             #ifdef ERROR_DEBUG
-    // //             Serial.println("Is configured already");
-    // //             #endif
-    // //             #endif
-
-                
-    // //         }
-    // //     }
-    // // }
-
-    //     if (_data.offsetIsValid() ) /* && ( !GeoData::offsetIsValid( _currentOffset )  || _currentOffset != _data.offset ) ) */
-    //     {
-    //         if ( !GeoData::offsetIsValid( _currentOffset )) {
-    //             #if defined(ESP32)
-    //             log_i("Configure time offset %d", _data.offset );
-    //             #else 
-    //             #ifdef ERROR_DEBUG
-    //             Serial.printf("Configure time offset %d", _data.offset );
-    //             #endif
-    //             #endif
-                
-    //             _currentOffset = _data.offset;
-    //             //sntp_set_timezone_in_seconds(_data.offset);
-
-    //             //::configTime(_data.offset, 0, "pool.ntp.org", "time.nist.gov");
-    //             setTimeZone(-_data.offset );
-    //             // Ждем синхронизации (неблокирующе)
-    //             static unsigned long syncStart = millis();
-    //             struct tm timeinfo;
-                
-    //             if (getLocalTime(&timeinfo, 5000))
-    //             {
-    //                 // Время установлено
-    //             }
-    //         } else if ( _currentOffset != _data.offset ){
-    //             #if defined(ESP32)
-    //             log_i("Reconfigure time offset %d", _data.offset );
-    //             #else 
-    //             #ifdef ERROR_DEBUG
-    //             Serial.printf("Reconfigure time offset %d", _data.offset );
-    //             #endif
-    //             #endif
-    //             auto _currentUnixTime = time(nullptr) - _currentOffset;
-
-    //             _currentOffset = _data.offset;
-    //             //::configTime(_data.offset, 0, "pool.ntp.org", "time.nist.gov");
-    //             setTimeZone(-_data.offset);
-    //             //sntp_set_timezone_in_seconds(_data.offset);
-
-    //             setSystemTime(_currentUnixTime);
-    //             // Ждем синхронизации (неблокирующе)
-    //             static unsigned long syncStart = millis();
-    //             struct tm timeinfo;
-                
-    //             if (getLocalTime(&timeinfo, 5000))
-    //             {
-    //                 // Время установлено
-    //             }
-    //         } else 
-            
-    //         {
-    //             #if defined(ESP32)
-    //             log_i("Is configured already");
-    //             #else 
-    //             #ifdef ERROR_DEBUG
-    //             Serial.println("Is configured already");
-    //             #endif
-    //             #endif
-
-                
-    //         }
-    //     }
-    // }
 
     void GeoLocation::_configTime()
     {
