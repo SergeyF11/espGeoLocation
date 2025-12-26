@@ -1,51 +1,24 @@
-#include "GeoLocation1.h"
+#include "GeoLocation.h"
 #include <time.h>
+
 
 namespace GeoLocation
 {
+
     static void setTimeZone(long offset) {
         char tz[17] = {0};
-        long displayOffset = -offset; // Инвертируем знак для отображения
 
         if (offset % 3600) {
-            snprintf(tz, sizeof(tz), "UTC%+ld:%02u:%02u", 
-                    displayOffset / 3600, 
-                    static_cast<unsigned int>(abs((displayOffset % 3600) / 60)), 
-                    static_cast<unsigned int>(abs(displayOffset % 60)));
+            snprintf(tz, sizeof(tz), "UTC%ld:%02u:%02u", 
+                    offset / 3600, 
+                    static_cast<unsigned int>(abs((offset % 3600) / 60)), 
+                    static_cast<unsigned int>(abs(offset % 60)));
         } else {
-            snprintf(tz, sizeof(tz), "UTC%+ld", displayOffset / 3600);
+            snprintf(tz, sizeof(tz), "UTC%ld", offset / 3600);
         }
 
         setenv("TZ", tz, 1);
         tzset();
-    }
-
-    String GeoLocation::getConfiguredTimeZone() {
-        const char* tz = getenv("TZ");
-        if (tz == nullptr) {
-            return String("UTC");
-        }
-        
-        // Парсим TZ строку и инвертируем знак для отображения
-        String configuredTz = String(tz);
-        
-        // Если строка содержит UTC, инвертируем знак
-        if (configuredTz.startsWith("UTC")) {
-            if (configuredTz.length() > 3) {
-                char sign = configuredTz.charAt(3);
-                if (sign == '+') {
-                    configuredTz.setCharAt(3, '-');
-                } else if (sign == '-') {
-                    configuredTz.setCharAt(3, '+');
-                }
-                // Если нет знака (например, "UTC0"), добавляем "+"
-                else if (sign >= '0' && sign <= '9') {
-                    configuredTz = "UTC+" + configuredTz.substring(3);
-                }
-            }
-        }
-        
-        return configuredTz;
     }
 
     const char * stateToStr(const State s){
@@ -61,7 +34,6 @@ namespace GeoLocation
                 return "Error";
         }
     };
-    
     const char* errorToStr(RequestError error) {
         switch(error) {
             case RequestError::None: return "None";
@@ -85,11 +57,7 @@ namespace GeoLocation
         , _executionTime(0)
         , _useHttpTime(true)
         , _autoSetTime(false)
-        , _currentOffset(0)
-        , _dataPtr(nullptr)
-        , _ipPtr(nullptr)
-        , _countryPtr(nullptr)
-        , _cityPtr(nullptr)
+        , _currentOffset(GeoData::NOT_VALID_OFFSET)
 #ifdef ESP8266
         , _contentLength(-1)
         , _headersReceived(false)
@@ -103,30 +71,15 @@ namespace GeoLocation
         stop();
     }
     
-    bool GeoLocation::begin(GeoData* data, bool autoSetTime, const char* language,
-                            char* ip, char* country, char* city)
+    bool GeoLocation::begin(bool autoSetTime, const char* language)
     {
         if (_state != State::Idle && _state != State::Completed && _state != State::Error)
         {
             return false; // Уже выполняется
         }
         
-        // Сохраняем указатели
-        _dataPtr = data;
-        _ipPtr = ip;
-        _countryPtr = country;
-        _cityPtr = city;
-        
-        // Очищаем временные буферы
-        _tempIp[0] = '\0';
-        _tempCountry[0] = '\0';
-        _tempCity[0] = '\0';
-        _tempTimezone = TimeZone();
-        _tempLatitude = 0.0;
-        _tempLongitude = 0.0;
-        
         // Сброс состояния
-        _resultData = GeoData();
+        _data = GeoData();
         _error = RequestError::None;
         _progress = ProgressPercents::None;
         _startTime = millis();
@@ -135,7 +88,7 @@ namespace GeoLocation
         _autoSetTime = autoSetTime;
         _language = language ? language : "";
 
-        if (autoSetTime) _useHttpTime = true;
+        if ( autoSetTime ) _useHttpTime = true;
     
         _linesReceived = 0;
         _currentLine = "";
@@ -143,8 +96,10 @@ namespace GeoLocation
         _httpDateSet = false;
         
 #ifdef ESP8266
+        
         _contentLength = -1;
         _headersReceived = false;
+           
 #endif
         
         // Проверка WiFi
@@ -168,7 +123,7 @@ namespace GeoLocation
         
         // Отправляем запрос
         sendHttpRequest();
-        setProgress(ProgressPercents::RequestSended);
+        setProgress(ProgressPercents::RequestSended); //20);
         
         return true;
     }
@@ -187,6 +142,7 @@ namespace GeoLocation
     {
         return _client.connect("ip-api.com", 80);
     }
+
 
     void GeoLocation::process()
     {
@@ -219,12 +175,15 @@ namespace GeoLocation
                 break;
                 
             case State::Receiving:
+            // парсим строку
                 processResponse();
                 break;
                 
             case State::AllParsed:
             case State::SettingTime:
+                // Парсинг уже выполнен в processResponse
                 completeRequest();
+                //setState(State::Completed);
                 break;
                 
             default:
@@ -265,137 +224,137 @@ namespace GeoLocation
     }
     
     void GeoLocation::sendHttpRequest()
+{
+    String request = "GET /line/?fields=status,country,city,lat,lon,timezone,offset,query";
+    if (_language.length() == 2)
     {
-        String request = "GET /line/?fields=status,country,city,lat,lon,timezone,offset,query";
-        if (_language.length() == 2)
-        {
-            request += "&lang=";
-            request += _language;
-        }
-        request += " HTTP/1.1\r\n";
-        request += "Host: ip-api.com\r\n";
-        request += "Connection: close\r\n";
-        request += "\r\n";
-        
-        _client.print(request);
+        request += "&lang=";
+        request += _language;
     }
+    request += " HTTP/1.1\r\n";
+    request += "Host: ip-api.com\r\n";
+    request += "Connection: close\r\n";
+    request += "\r\n";
+    
+    _client.print(request);
+}
 
-    void GeoLocation::processResponse()
+// устанавливает State::Parsing или State::Error
+void GeoLocation::processResponse()
+{
+    // Читаем данные, если они есть
+    while (_client.available())
     {
-        // Читаем данные, если они есть
-        while (_client.available())
+        char c = _client.read();
+        
+        if (c == '\n')
         {
-            char c = _client.read();
-            
-            if (c == '\n')
+            // Конец строки
+            if (!_headersParsed)
             {
-                // Конец строки
-                if (!_headersParsed)
+                // Парсим заголовки
+                if (_currentLine.length() == 0)
                 {
-                    // Парсим заголовки
-                    if (_currentLine.length() == 0)
-                    {
-                        // Пустая строка - конец заголовков
-                        _headersParsed = true;
-                        setProgress(ProgressPercents::HeaderParsed);
-                    }
-                    else
-                    {
-                        // Ищем заголовок Date
-                        if (_useHttpTime && !_httpDateSet && _currentLine.startsWith("Date:"))
-                        {
-                            auto httpTime = parseHttpDate(_currentLine.substring(6));
-                            if (httpTime > LIKE_VALID_TIME)
-                            {
-                                setSystemTime(httpTime, (httpCorrectionMs + _executionTime) * 1000);
-                                _httpDateSet = true;
-                            }
-                        }
-                    }
+                    // Пустая строка - конец заголовков
+                    _headersParsed = true;
+                    setProgress(ProgressPercents::HeaderParsed);
                 }
                 else
                 {
-                    // Парсим данные
-                    if (_currentLine.length() > 0)
+                    // Ищем заголовок Date
+                    if (_useHttpTime && !_httpDateSet && _currentLine.startsWith("Date:"))
                     {
-                        if (parseResponseLine(_currentLine, _linesReceived))
-                        {
-                            _linesReceived++;
-                            
-                            // Обновляем прогресс
-                            int newProgress = ProgressPercents::HeaderParsed + (_linesReceived * ProgressPercents::_oneLineParsed);
-                            setProgress(newProgress);
-                            
-                            if (_linesReceived >= Line::AllLine)
-                            {
-                                setState(State::AllParsed);
-                                
-                                // Сохраняем распарсенные данные
-                                saveParsedData();
-                                
-                                // Устанавливаем системное время, если нужно
-                                if (_autoSetTime && _tempTimezone.isValid())
-                                {
-                                    setState(State::SettingTime);    
-                                    _configTime();
-                                }
-                                
-                                setProgress(ProgressPercents::Completed);
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            // Ошибка парсинга
-                            setError(RequestError::ParseError);
-                            setState(State::Error);
-                            return;
+                        auto httpTime = parseHttpDate(_currentLine.substring(6));
+                        if ( httpTime > LIKE_VALID_TIME ){
+
+                            setSystemTime(httpTime, ( httpCorrectionMs + _executionTime)*1000 );
+
+                            _httpDateSet = true;
                         }
                     }
                 }
-                
-                _currentLine = "";
             }
-            else if (c != '\r')
+            else
             {
-                _currentLine += c;
+                // Парсим данные
+                if (_currentLine.length() > 0)
+                {
+                    if (parseResponseLine(_currentLine, _linesReceived))
+                    {
+                        _linesReceived++;
+                        
+                        // Обновляем прогресс
+                        int newProgress =  ProgressPercents::HeaderParsed + ( _linesReceived * ProgressPercents::_oneLineParsed );
+                         //40 + (_linesReceived * 60 / 7);
+                        setProgress(newProgress);
+                        
+                        if (_linesReceived >= Line::AllLine )
+                        {
+                            setState(State::AllParsed);
+                            // Все данные получены
+                            _data.isValid = true;
+                            
+                            // Устанавливаем системное время, если нужно
+                            if (_autoSetTime /* &&  _data.offsetIsValid() _data.offset != 0xFFFF */ )
+                            {
+                                setState(State::SettingTime);    
+                                _configTime();
+                            }
+                            //setProgress( ProgressPercents::AllParsed); //100);
+                            setProgress( ProgressPercents::Completed);
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        // Ошибка парсинга
+                        setError(RequestError::ParseError);
+                        setState(State::Error);
+                        return;
+                    }
+                }
             }
+            
+            _currentLine = "";
+        }
+        else if (c != '\r')
+        {
+            _currentLine += c;
+        }
+    }
+    
+    // Проверяем, завершено ли соединение
+    if (!_client.connected() && _linesReceived < 7)
+    {
+        if (_linesReceived > 0)
+        {
+            // Не все данные получены, но соединение закрыто
+            setError(RequestError::HttpError);
+            setState(State::Error);
+        }
+    }
+}
+
+    void GeoLocation::completeRequest()
+    {
+        // Закрываем соединение
+        if (_client.connected())
+        {
+            _client.stop();
         }
         
-        // Проверяем, завершено ли соединение
-        if (!_client.connected() && _linesReceived < 7)
+        _executionTime = millis() - _startTime;
+        
+        setState(State::Completed);
+        //setProgress(ProgressPercents::Completed);
+
+        // Вызываем коллбэк завершения
+        if (_completeCallback)
         {
-            if (_linesReceived > 0)
-            {
-                // Не все данные получены, но соединение закрыто
-                setError(RequestError::HttpError);
-                setState(State::Error);
-            }
+            _completeCallback(_data, RequestError::None);
         }
     }
 
-    void GeoLocation::saveParsedData()
-    {
-        // Сохраняем данные в указанную структуру GeoData
-        GeoData* targetData = _dataPtr ? _dataPtr : &_resultData;
-        
-        targetData->latitude = _tempLatitude;
-        targetData->longitude = _tempLongitude;
-        targetData->timezone = _tempTimezone;
-        
-        // Копируем дополнительные данные, если указатели заданы
-        if (_ipPtr && _tempIp[0] != '\0') {
-            strlcpy(_ipPtr, _tempIp, IP_SIZE);
-        }
-        
-        if (_countryPtr && _tempCountry[0] != '\0') {
-            strlcpy(_countryPtr, _tempCountry, COUNTRY_SIZE);
-        }
-        
-        if (_cityPtr && _tempCity[0] != '\0') {
-            strlcpy(_cityPtr, _tempCity, CITY_SIZE);
-        }
-    }
 
     bool GeoLocation::parseResponseLine(const String& line, int lineIndex)
     {
@@ -417,37 +376,31 @@ namespace GeoLocation
                 return strncmp("success", line.c_str(), sizeof("success")-1) == 0;
 
             case Line::Country: // country
-                if (_countryPtr) {
-                    strlcpy(_tempCountry, line.c_str(), COUNTRY_SIZE);
-                }
+                strlcpy(_data.country, line.c_str(), COUNTRY_SIZE);
                 return true;
                 
             case Line::City: // city
-                if (_cityPtr) {
-                    strlcpy(_tempCity, line.c_str(), CITY_SIZE);
-                }
+                strlcpy(_data.city, line.c_str(), CITY_SIZE);
                 return true;
                 
             case Line::Lat: // lat
-                _tempLatitude = line.toFloat();
+                _data.latitude = line.toFloat();
                 return true;
                 
             case Line::Lon: // lon
-                _tempLongitude = line.toFloat();
+                _data.longitude = line.toFloat();
                 return true;
                 
-            case Line::TimeZoneLine: // timezone
-                strlcpy(_tempTimezone.tz, line.c_str(), TIMEZONE_SIZE);
+            case Line::TimeZone: // timezone
+                strlcpy(_data.timezone, line.c_str(), TIMEZONE_SIZE);
                 return true;
                 
             case Line::Offset: // offset
-                _tempTimezone.offset = line.toInt();
+                _data.offset = line.toInt();
                 return true;
                 
             case Line::MyIP: // IP
-                if (_ipPtr) {
-                    strlcpy(_tempIp, line.c_str(), IP_SIZE);
-                }
+                strlcpy(_data.ip, line.c_str(), IP_SIZE);
                 return true;
                 
             default:
@@ -458,6 +411,7 @@ namespace GeoLocation
     time_t GeoLocation::parseHttpDate(const String& httpDate) const
     {
         time_t httpTime = 0;
+        //  надежный парсер HTTP-даты
         const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
         
@@ -485,42 +439,45 @@ namespace GeoLocation
             tm.tm_year -= 1900; // Год с 1900
             
             httpTime = mktime(&tm);
+            
+            // // Проверяем корректность времени
+            // if (unixTime > 1609459200) // После 1 января 2021
+            // {
+            //     setSystemTime(unixTime);
+            // }
         }
         return httpTime;
     }
 
-    void GeoLocation::setSystemTime(const time_t unixTime, const long usCorrections)
-    {
+    void GeoLocation::setSystemTime(const time_t unixTime , const long usCorrections ){
         struct timeval tv;
 
-        if (_tempTimezone.isValid())
-        {
+        if ( GeoData::offsetIsValid( _currentOffset ) ){
             #if defined(ESP32)
-            log_i("Correct unix time to local offset %d", _tempTimezone.offset);
+            log_i("Correct unix time to local offset %lu", _currentOffset);
             #else 
             #ifdef ERROR_DEBUG
-            Serial.printf("Correct unix time to local offset %d\n", _tempTimezone.offset);
+            Serial.printf("Correct unix time to local offset %lu\n", _currentOffset);
             #endif
             #endif
         
-            tv = {(unixTime + _tempTimezone.offset), usCorrections};
-        }
-        else
-        {
-            tv = {unixTime, usCorrections};
-        }
-        
+            tv = { (unixTime + _currentOffset), usCorrections };
+        } else 
+            tv = {unixTime, usCorrections };
         settimeofday(&tv, nullptr);
+        
     }
+
+    
 
     void GeoLocation::_configTime()
     {
-        if (!_tempTimezone.isValid()) {
+        if (!_data.offsetIsValid()) {
             return;
         }
 
-        const bool isOffsetValid = (_currentOffset != 0);
-        const bool hasOffsetChanged = (_currentOffset != _tempTimezone.offset);
+        const bool isOffsetValid = GeoData::offsetIsValid(_currentOffset);
+        const bool hasOffsetChanged = (_currentOffset != _data.offset);
 
         // Если смещение уже установлено и не изменилось
         if (isOffsetValid && !hasOffsetChanged) {
@@ -538,12 +495,12 @@ namespace GeoLocation
         #if defined(ESP32)
         log_i("%s time offset %d", 
             isOffsetValid ? "Reconfigure" : "Configure", 
-            _tempTimezone.offset);
+            _data.offset);
         #else 
         #ifdef ERROR_DEBUG
         Serial.printf("%s time offset %d\n", 
                     isOffsetValid ? "Reconfigure" : "Configure", 
-                    _tempTimezone.offset);
+                    _data.offset);
         #endif
         #endif
 
@@ -554,8 +511,8 @@ namespace GeoLocation
         }
 
         // Обновляем смещение и часовой пояс
-        _currentOffset = _tempTimezone.offset;
-        setTimeZone(_tempTimezone.offset);
+        _currentOffset = _data.offset;
+        setTimeZone(-_data.offset);
 
         // Восстанавливаем системное время при изменении смещения
         if (isOffsetValid && hasOffsetChanged) {
@@ -566,31 +523,12 @@ namespace GeoLocation
         struct tm timeinfo;
         if (getLocalTime(&timeinfo, 5000)) {
             // Время успешно установлено
+            // Можно добавить дополнительную логику при успешной синхронизации
         }
     }
 
-    void GeoLocation::completeRequest()
-    {
-        // Закрываем соединение
-        if (_client.connected())
-        {
-            _client.stop();
-        }
-        
-        _executionTime = millis() - _startTime;
-        
-        setState(State::Completed);
 
-        // Вызываем коллбэк завершения
-        if (_completeCallback)
-        {
-            _completeCallback(getResult(), RequestError::None);
-        }
-    }
-
-    bool GeoLocation::getLocation(GeoData* data, bool autoSetTime, const char* language,
-                                  unsigned long timeout,
-                                  char* ip, char* country, char* city)
+    bool GeoLocation::getLocation(bool autoSetTime, const char* language, unsigned long timeout)
     {
         if (isRunning()) {
             return false; // Уже выполняется асинхронно
@@ -612,7 +550,7 @@ namespace GeoLocation
         
         bool success = false;
         
-        if (begin(data, autoSetTime, language, ip, country, city)) {
+        if (begin(autoSetTime, language)) {
             unsigned long startTime = millis();
             
             // Основной цикл ожидания завершения
@@ -642,9 +580,10 @@ namespace GeoLocation
         
         // Вызываем сохранённый коллбэк завершения, если есть
         if (success && savedCompleteCallback) {
-            savedCompleteCallback(getResult(), RequestError::None);
+            savedCompleteCallback(_data, RequestError::None);
         }
         
         return success;
     }
+
 }

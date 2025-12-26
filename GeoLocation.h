@@ -26,6 +26,13 @@ namespace GeoLocation
     static const time_t LIKE_VALID_TIME = 1609459200;
     static const long httpCorrectionMs = 900;
 
+    inline void wifiTime(){
+        int64_t tsf_time = esp_wifi_get_tsf_time(WIFI_IF_STA);
+        Serial.printf("Current TSF time: %lld us\n", tsf_time);
+
+        Serial.printf("Local time %lu\n", time(nullptr));
+    }
+
     // Структура для хранения часового пояса
     struct TimeZone
     {

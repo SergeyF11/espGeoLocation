@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include "GeoLocation1.h"
+#include "GeoLocation.h"
 
 const char* ssid = "your_SSID";
 const char* password = "your_PASSWORD";
@@ -35,10 +35,10 @@ void setup()
     
     GeoLocation::wifiTime();
 
-    GeoLocation::GeoLocation geoService;
-    geoService.configTime("pool.ntp.org", "time.nist.gov");
+    GeoLocation::GeoLocation geoLoc;
+    geoLoc.configTime("pool.ntp.org", "time.nist.gov");
     
-    GeoData geoData;
+    GeoLocation::GeoData geoData;
     char ip[16], country[32], city[64];
     geoLoc.getLocation(&geoData, true, "ru", 10000, ip, country, city);
 
@@ -49,7 +49,7 @@ void setup()
     
     if (res) {
         Serial.println("\n=== Location Data ===");
-        geoService.getResult().printTo(Serial);
+        geoLoc.getResult().printTo(Serial);
         Serial.println("=====================");
         
 
