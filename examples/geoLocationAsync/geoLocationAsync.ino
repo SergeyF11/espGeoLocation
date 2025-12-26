@@ -6,6 +6,25 @@ const char* password = "your_PASSWORD";
 
 GeoLocation::GeoLocation geoService;
 
+#include <sys/time.h>
+
+void localTimeTo(Stream& s) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL); // Получаем системное время с микросекундами
+    
+    time_t now = tv.tv_sec;
+    struct tm* timeinfo = localtime(&now);
+    
+    // Рассчитываем миллисекунды из микросекунд
+    long milliseconds = tv.tv_usec / 1000;
+
+    s.printf("Current time: %02d:%02d:%02d.%03ld\n",
+             timeinfo->tm_hour, 
+             timeinfo->tm_min, 
+             timeinfo->tm_sec, 
+             milliseconds);
+}
+
 // Колбэк прогресса
 void onProgress(GeoLocation::State state, int progress)
 {
@@ -22,12 +41,9 @@ void onComplete(const GeoLocation::GeoData& data, GeoLocation::RequestError erro
         Serial.println("\n=== Location Data ===");
         data.printTo(Serial);
         Serial.println("=====================");
+        localTimeTo(Serial);
         
-        // Выводим текущее время
-        time_t now = time(nullptr);
-        struct tm* timeinfo = localtime(&now);
-        Serial.printf("Current time: %02d:%02d:%02d\n",
-                     timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+
     }
     else
     {
@@ -78,35 +94,49 @@ void setup()
     {
         Serial.println("Failed to start request!");
     }
+
+    while ( true ){
+        geoService.process();
+
+        auto res = geoService.getState();
+        if ( res == GeoLocation::State::Completed || 
+             res ==  GeoLocation::State::Error || 
+             res == GeoLocation::State::Idle ) 
+                break;
+    }
 }
 
 void loop()
 {
     // Основной цикл обработки
-    geoService.process();
+    //geoService.process();
     
     // Другая логика вашего приложения
     static unsigned long lastStatus = 0;
-    if (millis() - lastStatus >= 1000)
-    {
+    if (millis() - lastStatus >= 1000){
         lastStatus = millis();
+        localTimeTo(Serial);
         
-        // Показываем статус
-        if (geoService.isRunning())
-        {
-            Serial.printf("Running... State: %s, Progress: %d%%\n", 
-                        geoService.getStateStr(), geoService.getProgress());
-        }
-        
-        // Можно перезапустить запрос раз в минуту
-        static unsigned long lastRequest = 0;
-        if (millis() - lastRequest >= 60000 && !geoService.isRunning())
-        {
-            lastRequest = millis();
-            Serial.println("\nRestarting location request...");
-            geoService.begin(true, "ru");
-        }
     }
+    // {
+    //     lastStatus = millis();
+        
+    //     // Показываем статус
+    //     if (geoService.isRunning())
+    //     {
+    //         Serial.printf("Running... State: %s, Progress: %d%%\n", 
+    //                     geoService.getStateStr(), geoService.getProgress());
+    //     }
+        
+    //     // Можно перезапустить запрос раз в минуту
+    //     static unsigned long lastRequest = 0;
+    //     if (millis() - lastRequest >= 60000 && !geoService.isRunning())
+    //     {
+    //         lastRequest = millis();
+    //         Serial.println("\nRestarting location request...");
+    //         geoService.begin(true, "ru");
+    //     }
+    // }
     
     delay(10); // Небольшая задержка для стабильности
 }

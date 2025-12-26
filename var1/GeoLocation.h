@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <functional>
+#include "esp_wifi.h"
 
 #ifdef ESP8266
     #include <ESP8266WiFi.h>
@@ -26,6 +27,13 @@ namespace GeoLocation
     static const size_t TIMEZONE_SIZE = 48;
     static const time_t LIKE_VALID_TIME = 1609459200;
     static const long httpCorrectionMs = 900;
+
+    inline void wifiTime(){
+        int64_t tsf_time = esp_wifi_get_tsf_time(WIFI_IF_STA);
+        Serial.printf("Current TSF time: %lld us\n", tsf_time);
+
+        Serial.printf("Local time %lu\n", time(nullptr));
+    }
 
     // Структура для хранения геоданных
     struct GeoData
@@ -85,10 +93,22 @@ namespace GeoLocation
     };
     const char* errorToStr(RequestError error);
 
+    enum Line {
+        Status,
+        Country,
+        City,
+        Lat,
+        Lon,
+        TimeZone,
+        Offset,
+        MyIP,
+        AllLine
+    };
+
     enum ProgressPercents {
         None = 0,
         Connecting = 10,
-        _oneLineParsed = ( 60 / 7 ),
+        _oneLineParsed = ( 60 / Line::AllLine ),
         //_allLineParsed = HeaderParsed + ( 7 * _oneLineParsed ),
         RequestSended = 20,
         Receiving = 30,

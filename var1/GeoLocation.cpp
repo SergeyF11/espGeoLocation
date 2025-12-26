@@ -4,6 +4,7 @@
 
 namespace GeoLocation
 {
+
     static void setTimeZone(long offset) {
         char tz[17] = {0};
 
@@ -224,7 +225,7 @@ namespace GeoLocation
     
     void GeoLocation::sendHttpRequest()
 {
-    String request = "GET /line/?fields=country,city,lat,lon,timezone,offset,query";
+    String request = "GET /line/?fields=status,country,city,lat,lon,timezone,offset,query";
     if (_language.length() == 2)
     {
         request += "&lang=";
@@ -287,7 +288,7 @@ void GeoLocation::processResponse()
                          //40 + (_linesReceived * 60 / 7);
                         setProgress(newProgress);
                         
-                        if (_linesReceived >= 7)
+                        if (_linesReceived >= Line::AllLine )
                         {
                             setState(State::AllParsed);
                             // Все данные получены
@@ -354,39 +355,51 @@ void GeoLocation::processResponse()
         }
     }
 
+
     bool GeoLocation::parseResponseLine(const String& line, int lineIndex)
     {
         if (line.length() == 0) {
             return false; // Пустая строка
         }
         
+        #if defined(ESP32)
+        log_i("Parsing line \"%s\"", line.c_str());
+        #else 
+        #ifdef ERROR_DEBUG
+        Serial.printf("Parsing line \"%s\"\n", line.c_str());
+        #endif
+        #endif
+
         switch (lineIndex)
         {
-            case 0: // country
+            case Line::Status:
+                return strncmp("success", line.c_str(), sizeof("success")-1) == 0;
+
+            case Line::Country: // country
                 strlcpy(_data.country, line.c_str(), COUNTRY_SIZE);
                 return true;
                 
-            case 1: // city
+            case Line::City: // city
                 strlcpy(_data.city, line.c_str(), CITY_SIZE);
                 return true;
                 
-            case 2: // lat
+            case Line::Lat: // lat
                 _data.latitude = line.toFloat();
                 return true;
                 
-            case 3: // lon
+            case Line::Lon: // lon
                 _data.longitude = line.toFloat();
                 return true;
                 
-            case 4: // timezone
+            case Line::TimeZone: // timezone
                 strlcpy(_data.timezone, line.c_str(), TIMEZONE_SIZE);
                 return true;
                 
-            case 5: // offset
+            case Line::Offset: // offset
                 _data.offset = line.toInt();
                 return true;
                 
-            case 6: // IP
+            case Line::MyIP: // IP
                 strlcpy(_data.ip, line.c_str(), IP_SIZE);
                 return true;
                 

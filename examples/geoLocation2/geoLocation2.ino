@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include "GeoLocation.h"
+#include "GeoLocation1.h"
 
 const char* ssid = "your_SSID";
 const char* password = "your_PASSWORD";
@@ -11,6 +11,7 @@ void printTime(time_t now = time(nullptr)){
     Serial.printf("Current time: %02d:%02d:%02d\n",
                      timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 }
+
 
 void setup()
 {
@@ -37,10 +38,14 @@ void setup()
     GeoLocation::GeoLocation geoService;
     geoService.configTime("pool.ntp.org", "time.nist.gov");
     
+    GeoData geoData;
+    char ip[16], country[32], city[64];
+    geoLoc.getLocation(&geoData, true, "ru", 10000, ip, country, city);
+
     // Запускаем запрос
     Serial.println("\nStarting location request...");
     //bool started = geoService.begin(true, "ru"); // Автоустановка времени, русский язык
-    bool res = geoService.getLocation(true, "ru");
+    bool res = geoLoc.getLocation(&geoData, true, "ru", 10000, ip, country, city); //geoService.getLocation(true, "ru");
     
     if (res) {
         Serial.println("\n=== Location Data ===");
